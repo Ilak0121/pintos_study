@@ -145,6 +145,7 @@ void thread_awake(int64_t);
 int64_t awake_ticks(void);
 
 bool priority_comp(struct list_elem*,struct list_elem*, void*);
-void priority_preempt(void);
+void ready_list_show(void);
+bool preempt_should(void);
 
 #endif /* threads/thread.h */

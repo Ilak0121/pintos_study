@@ -86,6 +86,18 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+void 
+ready_list_show(){
+    struct list_elem* e= list_begin(&ready_list);
+    struct thread *t; 
+    for(;e!=list_end(&ready_list);e=list_next(e)){
+        t = list_entry(e,struct thread,elem);
+        printf("%d->",t->priority);
+    }
+    printf("\n");
+}
+
+
 void
 thread_init (void) 
 {
@@ -183,6 +195,7 @@ thread_awake(int64_t ticks){
             thread_unblock(t);
         }
     }
+
 }
 int64_t 
 awake_ticks(){
@@ -399,8 +412,15 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  priority_preempt ();
+  struct thread *curr=thread_current();
+  curr->priority = new_priority;
+  struct thread *next_to_run = list_entry(list_begin(&ready_list),struct thread,elem);
+
+  if(next_to_run->priority > new_priority){
+    thread_yield();
+  }
+
+  //priority_preempt ();
 }
 
 /* Returns the current thread's priority. */
@@ -410,14 +430,10 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-void
-priority_preempt (void){
-    if(!list_empty(&ready_list)){
-        struct thread *now=thread_current();
-        struct thread *after=list_entry(list_pop_front(&ready_list),struct thread,elem);
-        if(now->priority < after->priority)
-            thread_yield();
-    }
+bool
+preempt_should(void){
+    struct thread *t=list_entry(list_begin(&ready_list),struct thread,elem);
+    return t->priority > thread_get_priority();
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -563,6 +579,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  /*
+  enum intr_level old_level = intr_disable();
+  struct list_elem* e;//test code
+  for(e=list_begin(&ready_list);e!=list_end(&ready_list);e=list_next(e))
+      printf("%d->",list_entry(e,struct thread,elem)->priority);
+  printf("\n");
+  intr_set_level(old_level);
+  */
+
+
   if (list_empty (&ready_list))
     return idle_thread;
   else
@@ -625,6 +651,7 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
+
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;

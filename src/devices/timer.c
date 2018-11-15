@@ -175,6 +175,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  if(preempt_should())
+      intr_yield_on_return();
   if(ticks >= awake_ticks())
       thread_awake(ticks);
 }
