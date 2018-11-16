@@ -61,6 +61,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+#define DEPTH_LIMIT 8
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -86,6 +88,37 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+struct lock*
+lock_pop(struct thread *t){
+    if(t->sp<0)
+    {
+        struct lock *lock =&t->has_locks[t->sp];
+        t->sp--;
+        return lock;
+    }
+    else return 0;
+}
+
+bool
+lock_push(struct thread* t,struct lock* lock){
+    if(t->sp==8) return 0;
+    else{
+        t->sp++;
+        t->has_locks[t->sp] = *lock;
+    }
+    return 1;
+}
+bool
+lock_remove_lock(struct thread *t,struct lock *lock){
+    int i=0;
+    for(;i<t->sp;i++){
+        if(&t->has_locks[i] == lock){
+            t->has_locks[i] = *(struct lock* )0;
+            return 1;
+        }
+    }
+    return 0;
+}
 void 
 ready_list_show(){
     struct list_elem* e= list_begin(&ready_list);
@@ -247,6 +280,7 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  t->donator = NULL;
   tid = t->tid = allocate_tid ();
 
 
@@ -274,7 +308,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  if(preempt_should())
+      thread_yield();
   return tid;
 }
 
@@ -309,12 +344,19 @@ thread_unblock (struct thread *t)
 
   ASSERT (is_thread (t));
 
+  //printk("%d %s\n",t->status,t->name);
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   //list_push_back (&ready_list, &t->elem);
   list_insert_ordered(&ready_list,&t->elem,priority_comp,0);
+
   t->status = THREAD_READY;
   intr_set_level (old_level);
+}
+
+void
+insert_list_priority(struct list_elem *elem){
+  list_insert_ordered(&ready_list,elem,priority_comp,0);
 }
 
 /* Returns the name of the running thread. */
@@ -551,6 +593,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->save_priority = priority;
+  t->sp=-1;
   t->wait_time = 0;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
